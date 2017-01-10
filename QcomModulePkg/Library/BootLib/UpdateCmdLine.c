@@ -64,19 +64,24 @@ STATIC UINT32 AuthorizeKernelImage = 0;
 /* Display command line related structures */
 #define MAX_DISPLAY_CMD_LINE 256
 CHAR8 DisplayCmdLine[MAX_DISPLAY_CMD_LINE];
-UINT32 DisplayCmdLineLen = sizeof(DisplayCmdLine);
+UINTN DisplayCmdLineLen = sizeof(DisplayCmdLine);
 
-#if VERIFIED_BOOT
+boot_state_t BootState = BOOT_STATE_MAX;
+QCOM_VERIFIEDBOOT_PROTOCOL *VbIntf = NULL;
 STATIC CONST CHAR8 *VerityMode = " androidboot.veritymode=";
-STATIC struct verified_boot_verity_mode vbvm[] =
+STATIC CONST CHAR8 *VerifiedState = " androidboot.verifiedbootstate=";
+STATIC struct verified_boot_verity_mode VbVm[] =
 {
 	{FALSE, "logging"},
 	{TRUE, "enforcing"},
 };
-#else
-STATIC CONST CHAR8 *VerityMode;
-STATIC struct verified_boot_verity_mode vbvm[] = {};
-#endif
+STATIC struct verified_boot_state_name VbSn[] =
+{
+	{GREEN, "green"},
+	{ORANGE, "orange"},
+	{YELLOW, "yellow"},
+	{RED, "red"},
+};
 
 /*Function that returns whether the kernel is signed
  *Currently assumed to be signed*/
@@ -224,7 +229,7 @@ VOID GetDisplayCmdline()
 			L"DisplayPanelConfiguration",
 			&gQcomTokenSpaceGuid,
 			NULL,
-			(UINTN*)&DisplayCmdLineLen,
+			&DisplayCmdLineLen,
 			DisplayCmdLine);
 	if (Status != EFI_SUCCESS) {
 		DEBUG((EFI_D_ERROR, "Unable to get Panel Config, %r\n", Status));
@@ -241,9 +246,7 @@ STATIC UINT32 GetSystemPath(CHAR8 **SysPath)
 	CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
 	CHAR16* CurSlotSuffix = GetCurrentSlotSuffix();
 	CHAR8 LunCharMapping[] = { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
-	HandleInfo HandleInfoList[HANDLE_MAX_INFO_LIST];
-	UINT32 MaxHandles = ARRAY_SIZE(HandleInfoList);
-	MemCardType Type = UNKNOWN;
+	CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
 
 	*SysPath = AllocatePool(sizeof(char) * MAX_PATH_SIZE);
 	if (!*SysPath) {
@@ -251,22 +254,24 @@ STATIC UINT32 GetSystemPath(CHAR8 **SysPath)
 		return 0;
 	}
 
-	StrnCpyS(PartitionName, MAX_GPT_NAME_SIZE, L"system", StrLen(L"system"));
-	StrnCatS(PartitionName, MAX_GPT_NAME_SIZE, CurSlotSuffix, StrLen(CurSlotSuffix));
+	StrnCpyS(PartitionName, StrLen(L"system") + 1, L"system", StrLen(L"system"));
+	StrnCatS(PartitionName, MAX_GPT_NAME_SIZE - 1, CurSlotSuffix, StrLen(CurSlotSuffix));
 
 	Index = GetPartitionIndex(PartitionName);
-	if (Index == INVALID_PTN) {
+	if (Index == INVALID_PTN || Index >= MAX_NUM_PARTITIONS) {
 		DEBUG((EFI_D_ERROR, "System partition does not exit\n"));
 		FreePool(*SysPath);
 		return 0;
 	}
 
 	Lun = GetPartitionLunFromIndex(Index);
-	Type = CheckRootDeviceType(HandleInfoList, MaxHandles);
-	if (Type == UNKNOWN)
+	GetRootDeviceType(RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
+	if (!AsciiStrCmp("Unknown", RootDevStr)) {
+		FreePool(*SysPath);
 		return 0;
+	}
 
-	if (Type == EMMC)
+	if (!AsciiStrCmp("EMMC", RootDevStr))
 		AsciiSPrint(*SysPath, MAX_PATH_SIZE, " root=/dev/mmcblk0p%d", (Index + 1));
 	else
 		AsciiSPrint(*SysPath, MAX_PATH_SIZE, " root=/dev/sd%c%d", LunCharMapping[Lun],
@@ -320,8 +325,29 @@ EFI_STATUS UpdateCmdLine(CONST CHAR8 * CmdLine,
 	}
 
 	if (VerifiedBootEnbled()) {
+		if (DeviceInfo == NULL) {
+			DEBUG((EFI_D_ERROR, "DeviceInfo is NULL\n"));
+			return EFI_INVALID_PARAMETER;
+		}
+
 		CmdLineLen += AsciiStrLen(VerityMode);
-		CmdLineLen += AsciiStrLen(vbvm[DeviceInfo->verity_mode].name);
+		CmdLineLen += AsciiStrLen(VbVm[DeviceInfo->verity_mode].name);
+		Status = gBS->LocateProtocol(&gEfiQcomVerifiedBootProtocolGuid,
+				     NULL, (VOID **) &VbIntf);
+		if (Status != EFI_SUCCESS) {
+			DEBUG((EFI_D_ERROR, "Unable to locate VerifiedBoot Protocol to update cmdline\n"));
+			return Status;
+		}
+
+		if (VbIntf->Revision >= QCOM_VERIFIEDBOOT_PROTOCOL_REVISION) {
+			Status = VbIntf->VBGetBootState(VbIntf, &BootState);
+			if (Status != EFI_SUCCESS) {
+				DEBUG((EFI_D_ERROR, "Failed to read boot state to update cmdline\n"));
+				return Status;
+			}
+			CmdLineLen += AsciiStrLen(VerifiedState) +
+				AsciiStrLen(VbSn[BootState].name);
+		}
 	}
 
 	CmdLineLen += AsciiStrLen(BootDeviceCmdLine);
@@ -411,6 +437,24 @@ EFI_STATUS UpdateCmdLine(CONST CHAR8 * CmdLine,
 			Src = CmdLine;
 			STR_COPY(Dst,Src);
 		}
+
+		if (VerifiedBootEnbled()) {
+			Src = VerityMode;
+			--Dst;
+			STR_COPY(Dst,Src);
+			--Dst;
+			Src = VbVm[DeviceInfo->verity_mode].name;
+			STR_COPY(Dst,Src);
+			if (VbIntf->Revision >= QCOM_VERIFIEDBOOT_PROTOCOL_REVISION) {
+				Src = VerifiedState;
+				--Dst;
+				STR_COPY(Dst,Src);
+				--Dst;
+				Src = VbSn[BootState].name;
+				STR_COPY(Dst,Src);
+			}
+		}
+
 
 		Src = BootDeviceCmdLine;
 		if (HaveCmdLine) --Dst;

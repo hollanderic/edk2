@@ -153,13 +153,6 @@ EFI_STATUS EFIAPI LinuxLoaderEntry(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABL
 		}
 	}
 
-	// Check Alarm Boot
-
-	// Populate Serial number
-
-	// Check force reset (then do normal boot)
-
-	// Check for keys
 	Status = EnumeratePartitions();
 
 	if (EFI_ERROR (Status)) {
@@ -231,7 +224,11 @@ EFI_STATUS EFIAPI LinuxLoaderEntry(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABL
 			}
 			break;
 		case DM_VERITY_KEYSCLEAR:
-			// send delete keys to TZ
+			Status = ResetDeviceState();
+			if (Status != EFI_SUCCESS) {
+				DEBUG((EFI_D_ERROR, "VB Reset Device State error: %r\n", Status));
+				return Status;
+			}
 			break;
 		default:
 			break;
@@ -249,18 +246,18 @@ EFI_STATUS EFIAPI LinuxLoaderEntry(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABL
 	if (!BootIntoFastboot) {
 
 		if (MultiSlotBoot) {
-			FindBootableSlot(BootableSlot, sizeof(BootableSlot));
+			FindBootableSlot(BootableSlot, ARRAY_SIZE(BootableSlot) - 1);
 			if(!BootableSlot[0])
 				goto fastboot;
-			StrnCpyS(Pname, MAX_GPT_NAME_SIZE, BootableSlot, StrLen(BootableSlot));
+			StrnCpyS(Pname, StrLen(BootableSlot) + 1, BootableSlot, StrLen(BootableSlot));
 		} else {
 
 			if(BootIntoRecovery == TRUE) {
 				DEBUG((EFI_D_INFO, "Booting Into Recovery Mode\n"));
-				StrnCpyS(Pname, MAX_GPT_NAME_SIZE, L"recovery", StrLen(L"recovery"));
+				StrnCpyS(Pname, StrLen(L"recovery") + 1, L"recovery", StrLen(L"recovery"));
 			} else {
 				DEBUG((EFI_D_INFO, "Booting Into Mission Mode\n"));
-				StrnCpyS(Pname, MAX_GPT_NAME_SIZE, L"boot", StrLen(L"boot"));
+				StrnCpyS(Pname, StrLen(L"boot") + 1, L"boot", StrLen(L"boot"));
 			}
 		}
 
