@@ -16,7 +16,7 @@
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -363,13 +363,13 @@ STATIC VOID FastbootPublishSlotVars() {
 
 			AsciiStrnCpyS(BootSlotInfo[j].SlotSuffix, MAX_SLOT_SUFFIX_SZ, Suffix, AsciiStrLen(Suffix));
 			AsciiStrnCpyS(BootSlotInfo[j].SlotSuccessfulVar, SLOT_ATTR_SIZE, "slot-successful:", AsciiStrLen("slot-successful:"));
-			Set = PtnEntries[i].PartEntry.Attributes & PART_ATT_SUCCESSFUL_VAL;
+			Set = PtnEntries[i].PartEntry.Attributes & PART_ATT_SUCCESSFUL_VAL ? TRUE : FALSE;
 			AsciiStrnCpyS(BootSlotInfo[j].SlotSuccessfulVal, ATTR_RESP_SIZE, Set ? "yes": "no", Set? AsciiStrLen("yes"): AsciiStrLen("no"));
 			AsciiStrnCatS(BootSlotInfo[j].SlotSuccessfulVar, SLOT_ATTR_SIZE, Suffix, AsciiStrLen(Suffix));
 			FastbootPublishVar(BootSlotInfo[j].SlotSuccessfulVar, BootSlotInfo[j].SlotSuccessfulVal);
 
 			AsciiStrnCpyS(BootSlotInfo[j].SlotUnbootableVar, SLOT_ATTR_SIZE, "slot-unbootable:", AsciiStrLen("slot-unbootable:"));
-			Set = PtnEntries[i].PartEntry.Attributes & PART_ATT_UNBOOTABLE_VAL;
+			Set = PtnEntries[i].PartEntry.Attributes & PART_ATT_UNBOOTABLE_VAL ? TRUE : FALSE;
 			AsciiStrnCpyS(BootSlotInfo[j].SlotUnbootableVal, ATTR_RESP_SIZE, Set? "yes": "no", Set? AsciiStrLen("yes"): AsciiStrLen("no"));
 			AsciiStrnCatS(BootSlotInfo[j].SlotUnbootableVar, SLOT_ATTR_SIZE, Suffix, AsciiStrLen(Suffix));
 			FastbootPublishVar(BootSlotInfo[j].SlotUnbootableVar, BootSlotInfo[j].SlotUnbootableVal);
@@ -494,6 +494,8 @@ HandleSparseImgFlash(
 	sparse_header_t *sparse_header;
 	chunk_header_t  *chunk_header;
 	UINT32 total_blocks = 0;
+	UINT64 block_count_factor = 0;
+	UINT64 written_block_count = 0;
 	UINT64 PartitionSize = 0;
 	UINT32 i;
 	UINT64 ImageEnd;
@@ -557,6 +559,14 @@ HandleSparseImgFlash(
 		FastbootFail("Sparse header size mismatch");
 		return EFI_BAD_BUFFER_SIZE;
 	}
+
+	if ((sparse_header->blk_sz) % (BlockIo->Media->BlockSize)) {
+		DEBUG((EFI_D_ERROR, "Unsupported sparse block size %x\n", sparse_header->blk_sz));
+		FastbootFail("Unsupported sparse block size");
+		return EFI_INVALID_PARAMETER;
+	}
+
+	block_count_factor = (sparse_header->blk_sz) / (BlockIo->Media->BlockSize);
 
 	DEBUG((EFI_D_VERBOSE, "=== Sparse Image Header ===\n"));
 	DEBUG((EFI_D_VERBOSE, "magic: 0x%x\n", sparse_header->magic));
@@ -630,7 +640,8 @@ HandleSparseImgFlash(
 			}
 
 			/* Data is validated, now write to the disk */
-			Status = WriteToDisk(BlockIo, Handle, Image, chunk_data_sz, (UINT64)total_blocks);
+			written_block_count = total_blocks * block_count_factor;
+			Status = WriteToDisk(BlockIo, Handle, Image, chunk_data_sz, written_block_count);
 			if (EFI_ERROR(Status))
 			{
 				FastbootFail("Flash Write Failure");
@@ -683,7 +694,8 @@ HandleSparseImgFlash(
 					return EFI_VOLUME_FULL;
 				}
 
-				Status = WriteToDisk(BlockIo, Handle, (VOID *) fill_buf, sparse_header->blk_sz, (UINT64)total_blocks);
+				written_block_count = total_blocks * block_count_factor;
+				Status = WriteToDisk(BlockIo, Handle, (VOID *) fill_buf, sparse_header->blk_sz, written_block_count);
 				if (EFI_ERROR(Status))
 				{
 					FastbootFail("Flash write failure for FILL Chunk");
