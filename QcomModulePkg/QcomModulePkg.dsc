@@ -85,8 +85,9 @@
   ReportStatusCodeLib|IntelFrameworkModulePkg/Library/DxeReportStatusCodeLibFramework/DxeReportStatusCodeLib.inf
   ExtractGuidedSectionLib|MdePkg/Library/DxeExtractGuidedSectionLib/DxeExtractGuidedSectionLib.inf
 
+# -fstack-protector-strong
 [BuildOptions.AARCH64]
-  GCC:*_*_AARCH64_ARCHCC_FLAGS  = -Wno-shift-negative-value -fstack-protector-strong -Wno-varargs
+  GCC:*_*_AARCH64_ARCHCC_FLAGS  = -Wno-shift-negative-value -Wno-varargs
   GCC:*_*_AARCH64_DLINK_FLAGS = -Ttext=0x0
   !if $(VERIFIED_BOOT)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT

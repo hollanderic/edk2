@@ -1,3 +1,6 @@
 Build/
 tags/
 build_modulepkg.log
+*.pyc
+*.log
+ABL_OBJ
