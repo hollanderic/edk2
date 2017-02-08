@@ -43,6 +43,7 @@
 	ShutdownServices.c
 	Board.c
 	BootLinux.c
+	BootMagenta.c
 	Decompress.c
 	LocateDeviceTree.c
 	UpdateDeviceTree.c
