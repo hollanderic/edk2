@@ -68,6 +68,9 @@ typedef enum
   EFI_PLATFORMINFO_TYPE_ADP         = 0x19,  /**< ADP device. */
   EFI_PLATFORMINFO_TYPE_SDP         = 0x1B,  /**< SDP device. */
   EFI_PLATFORMINFO_TYPE_RRP         = 0x1C,  /**< RRP device. */
+  EFI_PLATFORMINFO_TYPE_CLS         = 0x1D,  /**< CLS device. */
+  EFI_PLATFORMINFO_TYPE_TRAPPER     = 0x1E,
+
 
   EFI_PLATFORMINFO_NUM_TYPES, /**< Number of known targets
                                                  (including unknown). @newpage */
