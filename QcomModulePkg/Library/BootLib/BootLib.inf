@@ -42,6 +42,7 @@
 [Sources]
 	ShutdownServices.c
 	Board.c
+	ArgList.c
 	BootLinux.c
 	BootMagenta.c
 	Decompress.c
