@@ -10,5 +10,5 @@ struct arg_list {
 
 void ArgListFree(arg_list_t** list);
 arg_list_t* ArgListNewNode(arg_list_t** list, CHAR8* str, UINT32 len);
-
+UINT32 ArgListCat(arg_list_t* list, CHAR8** outstr);
 #endif
