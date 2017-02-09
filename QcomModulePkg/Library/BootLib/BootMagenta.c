@@ -32,6 +32,7 @@
 
 #include <Library/VerifiedBootMenu.h>
 #include <Library/DrawUI.h>
+#include <Library/ArgList.h>
 #include <Protocol/EFIScmModeSwitch.h>
 #include <Library/PartitionTableUpdate.h>
 #include <Protocol/EFIMdtp.h>
@@ -40,6 +41,13 @@
 #include "BootStats.h"
 #include "BootImage.h"
 #include "UpdateDeviceTree.h"
+
+
+#define MAGENTA_PARAMETER_MAX_LEN 256
+#define MAGENTA_VID_QCOM		0
+#define MAGENTA_PID_TRAPPER		0
+
+STATIC CHAR8 MagentaSOCCmd[MAGENTA_PARAMETER_MAX_LEN];
 
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 
@@ -284,6 +292,37 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 	/*Updates the command line from boot image, appends device serial no., baseband information, etc
 	 *Called before ShutdownUefiBootServices as it uses some boot service functions*/
 
+
+
+	arg_list_t* magenta_args =NULL;
+
+	AsciiSPrint(MagentaSOCCmd, MAGENTA_PARAMETER_MAX_LEN, "magenta.soc=%d,%d", MAGENTA_VID_QCOM, MAGENTA_PID_TRAPPER);
+
+	DEBUG((EFI_D_INFO, "New node\n"));
+
+	ArgListNewNode(&magenta_args,MagentaSOCCmd,AsciiStrLen(MagentaSOCCmd));
+
+	DEBUG((EFI_D_INFO, "New node\n"));
+
+	AsciiSPrint(MagentaSOCCmd, MAGENTA_PARAMETER_MAX_LEN, "magenta.framebuffer=0,1,2,3");
+	DEBUG((EFI_D_INFO, "New node\n"));
+
+
+	ArgListNewNode(&magenta_args,MagentaSOCCmd,AsciiStrLen(MagentaSOCCmd));
+	DEBUG((EFI_D_INFO, "New node\n"));
+
+	ArgListCat(magenta_args,&FinalCmdLine);
+
+	for(int i=0; i<AsciiStrLen(FinalCmdLine); i++) {
+		DEBUG((EFI_D_INFO, "%d  %02x  %c\n",i,FinalCmdLine[i],FinalCmdLine[i]));
+	}
+
+	DEBUG((EFI_D_INFO, "Magenta command line->%a\n\n\n", FinalCmdLine));
+
+#if 0
+
+
+
 	Status = UpdateCmdLine(CmdLine, FfbmStr, DevInfo, Recovery, &FinalCmdLine);
 	if (EFI_ERROR(Status))
 	{
@@ -292,7 +331,7 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 	}
 
 
-
+#endif
 
 
 	// appended device tree

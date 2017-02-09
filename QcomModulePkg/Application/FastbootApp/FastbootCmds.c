@@ -76,6 +76,8 @@
 #include "MetaFormat.h"
 #include "BootImage.h"
 #include "BootLinux.h"
+#include "BootMagenta.h"
+
 #include "LinuxLoaderLib.h"
 #include "BootStats.h"
 
@@ -161,7 +163,7 @@ STATIC VOID AcceptCmd (IN UINT64 Size,IN  CHAR8 *Data);
 STATIC
 EFI_STATUS
 FastbootInit()
-{ 
+{
 	EFI_STATUS Status;
 
 	Status = EnumeratePartitions();
@@ -445,7 +447,7 @@ void PopulateMultislotMetadata()
 
 /* Helper function to write data to disk */
 STATIC EFI_STATUS
-WriteToDisk ( 
+WriteToDisk (
 	IN EFI_BLOCK_IO_PROTOCOL *BlockIo,
 	IN EFI_HANDLE *Handle,
 	IN VOID *Image,
@@ -1386,7 +1388,7 @@ VOID DataReady(
 	)
 {
 	DEBUG((EFI_D_VERBOSE, "DataReady %d\n", Size));
-	if (mState == ExpectCmdState) 
+	if (mState == ExpectCmdState)
 		AcceptCmd (Size, (CHAR8 *) Data);
 	else if (mState == ExpectDataState)
 		AcceptData (Size, Data);
@@ -1441,7 +1443,7 @@ FastbootCmdsInit (VOID)
 	CHAR8                           *FastBootBuffer;
 
 	mDataBuffer = NULL;
-  
+
 	/* Initialize the Fastboot Platform Protocol */
 	DEBUG((EFI_D_INFO, "Fastboot: Initializing...\n"));
 	Status = FastbootInit();
@@ -1625,7 +1627,7 @@ STATIC VOID CmdGetVar(CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 			return;
 		}
 	}
- 
+
 	FastbootFail("GetVar Variable Not found");
 }
 
@@ -1690,7 +1692,7 @@ STATIC VOID CmdBoot(CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 
 	FastbootOkay("");
 	FastbootUsbDeviceStop();
-	BootLinux(Data, ImageSizeActual, &FbDevInfo, L"boot", FALSE);
+	BootMagenta(Data, ImageSizeActual, &FbDevInfo, L"boot", FALSE);
 }
 #endif
 
@@ -2084,7 +2086,7 @@ STATIC EFI_STATUS FastbootCommandSetup(
 		{ "download:", CmdDownload },
 	};
 
-	/* Register the commands only for non-user builds */ 
+	/* Register the commands only for non-user builds */
 	Status = BoardSerialNum(StrSerialNum, sizeof(StrSerialNum));
 	if (Status != EFI_SUCCESS)
 	{
