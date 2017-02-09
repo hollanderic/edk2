@@ -47,10 +47,8 @@
 #define MAGENTA_VID_QCOM		0
 #define MAGENTA_PID_TRAPPER		0
 
-STATIC CHAR8 MagentaSOCCmd[MAGENTA_PARAMETER_MAX_LEN];
-
-STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
-
+STATIC CHAR8 MagentaSOCCmd[MAGENTA_PARAMETER_MAX_LEN] = {'\0'};
+STATIC CHAR8 MagentaFBCmd[MAGENTA_PARAMETER_MAX_LEN] = {'\0'};
 
 EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo, CHAR16 *PartitionName, BOOLEAN Recovery)
 {
@@ -82,14 +80,6 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 	UINT64 out_avai_len = 0;
 	CHAR8* CmdLine = NULL;
 	UINT64 BaseMemory = 0;
-	boot_state_t BootState = BOOT_STATE_MAX;
-	QCOM_VERIFIEDBOOT_PROTOCOL *VbIntf;
-	device_info_vb_t DevInfo_vb;
-	CHAR8 StrPartition[MAX_GPT_NAME_SIZE] = {'\0'};
-	CHAR8 PartitionNameAscii[MAX_GPT_NAME_SIZE] = {'\0'};
-	BOOLEAN BootingWith32BitKernel = FALSE;
-	QCOM_MDTP_PROTOCOL *MdtpProtocol;
-	MDTP_VB_EXTERNAL_PARTITION ExternalPartition;
 	CHAR8 FfbmStr[FFBM_MODE_BUF_SIZE] = {'\0'};
 
 	if (!StrnCmp(PartitionName, L"boot", StrLen(L"boot")))
@@ -100,72 +90,14 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 			FfbmStr[0] = '\0';
 		}
 	}
-	if (VerifiedBootEnbled())
-	{
-		DEBUG((EFI_D_INFO, "Verified Boot is enabled\n"));
-		Status = gBS->LocateProtocol(&gEfiQcomVerifiedBootProtocolGuid, NULL, (VOID **) &VbIntf);
-		if (Status != EFI_SUCCESS)
-		{
-			DEBUG((EFI_D_ERROR, "Unable to locate VB protocol: %r\n", Status));
-			return Status;
-		}
-		DevInfo_vb.is_unlocked = DevInfo->is_unlocked;
-		DevInfo_vb.is_unlock_critical = DevInfo->is_unlock_critical;
-		Status = VbIntf->VBDeviceInit(VbIntf, (device_info_vb_t *)&DevInfo_vb);
-		if (Status != EFI_SUCCESS)
-		{
-			DEBUG((EFI_D_ERROR, "Error during VBDeviceInit: %r\n", Status));
-			return Status;
-		}
-
-		UnicodeStrToAsciiStr(PartitionName, PartitionNameAscii);
-		AsciiStrnCpyS(StrPartition, MAX_GPT_NAME_SIZE, "/", AsciiStrLen("/"));
-		AsciiStrnCatS(StrPartition, MAX_GPT_NAME_SIZE, PartitionNameAscii, AsciiStrLen(PartitionNameAscii));
-
-		Status = VbIntf->VBVerifyImage(VbIntf, (UINT8 *)StrPartition, (UINT8 *) ImageBuffer, ImageSize, &BootState);
-		if (Status != EFI_SUCCESS && BootState == BOOT_STATE_MAX)
-		{
-			DEBUG((EFI_D_ERROR, "VBVerifyImage failed with: %r\n", Status));
-			return Status;
-		}
-
-		DEBUG((EFI_D_VERBOSE, "Boot State is : %d\n", BootState));
-		switch (BootState)
-		{
-			case RED:
-				DisplayVerifiedBootMenu(DISPLAY_MENU_RED);
-				MicroSecondDelay(5000000);
-				ShutdownDevice();
-				break;
-			case YELLOW:
-				DisplayVerifiedBootMenu(DISPLAY_MENU_YELLOW);
-				MicroSecondDelay(5000000);
-				break;
-			case ORANGE:
-				if (FfbmStr[0] == '\0') {
-					DisplayVerifiedBootMenu(DISPLAY_MENU_ORANGE);
-					MicroSecondDelay(5000000);
-				}
-				break;
-			default:
-				break;
-		}
-
-		Status = VbIntf->VBSendRot(VbIntf);
-		if (Status != EFI_SUCCESS)
-		{
-			DEBUG((EFI_D_ERROR, "Error sending Rot : %r\n", Status));
-			return Status;
-		}
-	} else {
-		DEBUG((EFI_D_INFO, "No Verified Boot\n"));
-	}
 
 	KernelSize = ((boot_img_hdr*)(ImageBuffer))->kernel_size;
 	RamdiskSize = ((boot_img_hdr*)(ImageBuffer))->ramdisk_size;
 	SecondSize = ((boot_img_hdr*)(ImageBuffer))->second_size;
 	PageSize = ((boot_img_hdr*)(ImageBuffer))->page_size;
+
 	CmdLine = (CHAR8*)&(((boot_img_hdr*)(ImageBuffer))->cmdline[0]);
+
 	KernelSizeActual = ROUND_TO_PAGE(KernelSize, PageSize - 1);
 	RamdiskSizeActual = ROUND_TO_PAGE(RamdiskSize, PageSize - 1);
 
@@ -228,18 +160,9 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 		}
 		Kptr = ImageBuffer + PageSize;
 	}
-	if (Kptr->magic_64 != KERNEL64_HDR_MAGIC) {
-		BootingWith32BitKernel = TRUE;
-		KernelLoadAddr = (EFI_PHYSICAL_ADDRESS)(BaseMemory | PcdGet32(KernelLoadAddress32));
-		if (CHECK_ADD64((UINT64)Kptr, DTB_OFFSET_LOCATION_IN_ARCH32_KERNEL_HDR)) {
-			DEBUG((EFI_D_ERROR, "Integer Overflow: in DTB offset addition\n"));
-			return EFI_BAD_BUFFER_SIZE;
-		}
-		CopyMem((VOID*)&DtbOffset, ((VOID*)Kptr + DTB_OFFSET_LOCATION_IN_ARCH32_KERNEL_HDR), sizeof(DtbOffset));
-	}
 
 	CmdLine[BOOT_ARGS_SIZE-1] = '\0';
-	DEBUG((EFI_D_ERROR, "Command Line ->%a\n", CmdLine));
+	DEBUG((EFI_D_ERROR, "Inbound Command Line ->%a\n", CmdLine));
 
 
 
@@ -292,47 +215,19 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 	/*Updates the command line from boot image, appends device serial no., baseband information, etc
 	 *Called before ShutdownUefiBootServices as it uses some boot service functions*/
 
-
-
 	arg_list_t* magenta_args =NULL;
 
 	AsciiSPrint(MagentaSOCCmd, MAGENTA_PARAMETER_MAX_LEN, "magenta.soc=%d,%d", MAGENTA_VID_QCOM, MAGENTA_PID_TRAPPER);
 
-	DEBUG((EFI_D_INFO, "New node\n"));
-
 	ArgListNewNode(&magenta_args,MagentaSOCCmd,AsciiStrLen(MagentaSOCCmd));
 
-	DEBUG((EFI_D_INFO, "New node\n"));
+	ArgListNewNode(&magenta_args,MagentaFBCmd,AsciiStrLen(MagentaSOCCmd));
 
-	AsciiSPrint(MagentaSOCCmd, MAGENTA_PARAMETER_MAX_LEN, "magenta.framebuffer=0,1,2,3");
-	DEBUG((EFI_D_INFO, "New node\n"));
-
-
-	ArgListNewNode(&magenta_args,MagentaSOCCmd,AsciiStrLen(MagentaSOCCmd));
-	DEBUG((EFI_D_INFO, "New node\n"));
+	ArgListNewNode(&magenta_args,CmdLine,AsciiStrLen(CmdLine));
 
 	ArgListCat(magenta_args,&FinalCmdLine);
 
-	for(int i=0; i<AsciiStrLen(FinalCmdLine); i++) {
-		DEBUG((EFI_D_INFO, "%d  %02x  %c\n",i,FinalCmdLine[i],FinalCmdLine[i]));
-	}
-
-	DEBUG((EFI_D_INFO, "Magenta command line->%a\n\n\n", FinalCmdLine));
-
-#if 0
-
-
-
-	Status = UpdateCmdLine(CmdLine, FfbmStr, DevInfo, Recovery, &FinalCmdLine);
-	if (EFI_ERROR(Status))
-	{
-		DEBUG((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
-		return Status;
-	}
-
-
-#endif
-
+	DEBUG((EFI_D_INFO, "Magenta final command line->%a\n\n\n", FinalCmdLine));
 
 	// appended device tree
 	void *dtb;
@@ -348,10 +243,6 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 		DEBUG((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
 		return Status;
 	}
-
-
-
-
 
 	RamdiskEndAddr = (EFI_PHYSICAL_ADDRESS)(BaseMemory | PcdGet32(RamdiskEndAddress));
 	if (RamdiskEndAddr - RamdiskLoadAddr < RamdiskSize){
@@ -379,57 +270,8 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 		}
 	}
 
-	if (VerifiedBootEnbled()){
-		DEBUG((EFI_D_INFO, "Sending Milestone Call\n"));
-		Status = VbIntf->VBSendMilestone(VbIntf);
-		if (Status != EFI_SUCCESS)
-		{
-			DEBUG((EFI_D_INFO, "Error sending milestone call to TZ\n"));
-			return Status;
-		}
-	}
-
-	if (FixedPcdGetBool(EnableMdtpSupport)) {
-		Status = gBS->LocateProtocol(&gQcomMdtpProtocolGuid,
-			NULL,
-			(VOID**)&MdtpProtocol);
-		if (EFI_ERROR(Status)) {
-			DEBUG((EFI_D_ERROR, "Failed to locate MDTP protocol, Status=%r\n", Status));
-			goto Exit;
-		}
-
-		/* Set external partition values, to determine whether MDTP can use VerifiedBoot result.
-		 * In any case, we will provide parameters that would allow MDTP to call VerifiedBoot
-		 * protocol by itself, if necessary */
-		ExternalPartition.VbEnabled = VerifiedBootEnbled();
-		AsciiStrnCpyS(ExternalPartition.PartitionName, MAX_PARTITION_NAME_LEN, StrPartition, AsciiStrLen(StrPartition));
-		ExternalPartition.ImageBuffer = ImageBuffer;
-		ExternalPartition.ImageSize = ImageSize;
-		ExternalPartition.BootState = BootState;
-		ExternalPartition.DevInfo = DevInfo_vb;
-
-		Status = MdtpProtocol->MdtpVerify(MdtpProtocol, &ExternalPartition);
-
-		if (EFI_ERROR(Status)) {
-			/* MdtpVerify should always handle errors internally, so when returned back to the caller,
-			 * the return value is expected to be success only.
-			 * Therfore, we don't expect any error status here. */
-			DEBUG((EFI_D_ERROR, "MDTP verification failed, Status=%r\n", Status));
-			goto Exit;
-		}
-
-		DEBUG((EFI_D_VERBOSE, "MDTP verified successfully\n"));
-	}
-
 	/* Free the boot logo blt buffer before starting kernel */
 	FreeBootLogoBltBuffer();
-	if (BootingWith32BitKernel) {
-		Status = gBS->LocateProtocol(&gQcomScmModeSwithProtocolGuid, NULL, (VOID**)&pQcomScmModeSwitchProtocol);
-		if(EFI_ERROR(Status)) {
-			DEBUG((EFI_D_ERROR,"ERROR: Unable to Locate Protocol handle for ScmModeSwicthProtocol Status=%r\n", Status));
-			return Status;
-		}
-	}
 
 	DEBUG((EFI_D_INFO, "\nShutting Down UEFI Boot Services: %u ms\n", GetTimerCountms()));
 	/*Shut down UEFI boot services*/
@@ -450,11 +292,6 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 	//
 	// Start the Linux Kernel
 	//
-
-
-	CmdLine[BOOT_ARGS_SIZE-1] = '\0';
-	DEBUG((EFI_D_ERROR, "Command Line ->%s\n", CmdLine));
-	while(1);;
 
 
 	LinuxKernel = (LINUX_KERNEL)(UINT64)KernelLoadAddr;
