@@ -61,6 +61,7 @@ typedef enum {
 	BGR_BLUE,
 	BGR_CYAN,
 	BGR_SILVER,
+	BGR_MAGENTA,
 } COLOR_TYPE;
 
 typedef enum {
