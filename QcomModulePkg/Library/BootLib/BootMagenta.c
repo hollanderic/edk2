@@ -50,6 +50,46 @@
 STATIC CHAR8 MagentaSOCCmd[MAGENTA_PARAMETER_MAX_LEN] = {'\0'};
 STATIC CHAR8 MagentaFBCmd[MAGENTA_PARAMETER_MAX_LEN] = {'\0'};
 
+STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL  *GraphicsOutputProtocol = NULL;
+
+
+STATIC EFI_STATUS InitGraphicsProto() {
+	EFI_HANDLE    ConsoleHandle = (EFI_HANDLE)NULL;
+
+	if (GraphicsOutputProtocol == NULL) {
+		ConsoleHandle = gST->ConsoleOutHandle;
+		if (ConsoleHandle == NULL) {
+			DEBUG((EFI_D_ERROR, "Failed to get the handle for the active console input device.\n"));
+			return 0;
+		}
+
+		gBS->HandleProtocol (
+			ConsoleHandle,
+			&gEfiGraphicsOutputProtocolGuid,
+			(VOID **) &GraphicsOutputProtocol
+		);
+		if (GraphicsOutputProtocol == NULL) {
+			DEBUG((EFI_D_ERROR, "Failed to get the graphics output protocol.\n"));
+			return 0;
+		}
+	}
+	return EFI_SUCCESS;
+}
+
+
+EFI_STATUS GetFBInfo(fb_info_t* fb_info) {
+
+	InitGraphicsProto();
+	fb_info->height = GraphicsOutputProtocol->Mode->Info->VerticalResolution;
+	fb_info->width  = GraphicsOutputProtocol->Mode->Info->HorizontalResolution;
+	fb_info->ptr  	= GraphicsOutputProtocol->Mode->FrameBufferBase;
+	fb_info->mode 	= 4;
+
+	return EFI_SUCCESS;
+}
+
+
+
 EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo, CHAR16 *PartitionName, BOOLEAN Recovery)
 {
 
@@ -221,7 +261,13 @@ EFI_STATUS BootMagenta (VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo
 
 	ArgListNewNode(&magenta_args,MagentaSOCCmd,AsciiStrLen(MagentaSOCCmd));
 
-	ArgListNewNode(&magenta_args,MagentaFBCmd,AsciiStrLen(MagentaSOCCmd));
+	fb_info_t fb;
+	GetFBInfo(&fb);
+
+	AsciiSPrint(MagentaFBCmd, MAGENTA_PARAMETER_MAX_LEN, "magenta.fbuffer=%x,%d,%d,%d",
+														fb.ptr, fb.width, fb.height, fb.mode);
+
+	ArgListNewNode(&magenta_args,MagentaFBCmd,AsciiStrLen(MagentaFBCmd));
 
 	ArgListNewNode(&magenta_args,CmdLine,AsciiStrLen(CmdLine));
 

@@ -78,6 +78,14 @@
 
 typedef VOID (*LINUX_KERNEL)(UINT64 ParametersBase, UINT64 Reserved0, UINT64 Reserved1, UINT64 Reserved2);
 
+typedef struct {
+    UINT64  ptr;
+    UINT32  width;
+    UINT32  height;
+    UINT32  mode;
+} fb_info_t;
+
+
 EFI_STATUS BootMagenta(VOID *ImageBuffer, UINT32 ImageSize, DeviceInfo *DevInfo, CHAR16 *PartitionName, BOOLEAN Recovery);
 EFI_STATUS CheckImageHeader (VOID *ImageHdrBuffer, UINT32 ImageHdrSize, UINT32 *ImageSizeActual, UINT32 *PageSize);
 EFI_STATUS LoadImage (CHAR16 *Pname, VOID **ImageBuffer, UINT32 *ImageSizeActual);
