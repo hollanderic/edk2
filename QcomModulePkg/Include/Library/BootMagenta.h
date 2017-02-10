@@ -76,7 +76,9 @@
 #define DECOMPRESS_SIZE_FACTOR 8
 #define ALIGNMENT_MASK_4KB 4096
 
-typedef VOID (*LINUX_KERNEL)(UINT64 ParametersBase, UINT64 Reserved0, UINT64 Reserved1, UINT64 Reserved2);
+
+
+typedef VOID (*MAGENTA_KERNEL)(UINT64 ParametersBase, UINT64 Reserved0, UINT64 Reserved1, UINT64 Reserved2);
 
 typedef struct {
     UINT64  ptr;
